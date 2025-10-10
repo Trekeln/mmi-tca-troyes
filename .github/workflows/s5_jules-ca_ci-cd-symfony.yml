@@ -41,23 +41,25 @@ jobs:
 
       - name: Audit de sécurité
         run: composer audit --format=json --no-interaction
-        continue-on-error: true # Permettre au CI de continuer même si des vulnérabilités sont détectées
+        continue-on-error: true # Permet au CI de continuer même si des vulnérabilités sont détectées
 
       - name: Dump environment variables for production
-        run: |
-          composer dump-env prod
+        run: composer dump-env prod
         env:
           APP_ENV: prod
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      - name: Créer un artefact compressé
+        run: tar -czvf symfony-artifact-r1.tar.gz .
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: symfony-artifact
+          name: symfony-artifact-r1
           path: symfony-artifact-r1.tar.gz
 
-        deploy-to-server:
-    needs: build-artifact
+  deploy-to-server:
+    needs: ci-symfony
     runs-on: ubuntu-latest
 
     steps:
@@ -97,4 +99,4 @@ jobs:
             php bin/console cache:clear --env=prod
             php bin/console cache:warmup --env=prod
             sudo systemctl restart apache2
-          EOF 
+          EOF
