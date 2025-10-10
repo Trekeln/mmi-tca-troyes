@@ -55,3 +55,46 @@ jobs:
         with:
           name: symfony-artifact
           path: symfony-artifact-r1.tar.gz
+
+        deploy-to-server:
+    needs: build-artifact
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Téléchargement de l’artefact
+      - name: Download Symfony artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: symfony-artifact-r1
+
+      # 2. Configuration de la clé SSH
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      # 3. Test de la connexion SSH (facultatif mais utile pour debug)
+      - name: Test SSH connection
+        run: ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "echo ✅ SSH connection successful"
+
+      # 4. Copie de l’artefact sur le serveur
+      - name: Copy artifact to server via SCP
+        run: scp symfony-artifact-r1.tar.gz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/my-app/
+
+      # 5. Déploiement distant
+      - name: Deploy Artifact on remote server
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            cd /var/www/my-app/
+            tar -xvf symfony-artifact-r1.tar.gz
+            rm symfony-artifact-r1.tar.gz
+            composer install --no-dev --optimize-autoloader --ignore-platform-reqs
+            php bin/console doctrine:migrations:migrate --no-interaction
+            php bin/console cache:clear --env=prod
+            php bin/console cache:warmup --env=prod
+            sudo systemctl restart apache2
+          EOF 
